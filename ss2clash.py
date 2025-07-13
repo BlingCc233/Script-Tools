@@ -102,7 +102,6 @@ def main():
         'mode': 'rule',
         'log-level': 'info',
         'external-controller': '0.0.0.0:9090',
-        'external-ui': "https://cdn.jsdelivr.net/gh/MetaCubeX/yacd-gh-pages@gh-pages",
         
         'dns': {
             'enable': True,

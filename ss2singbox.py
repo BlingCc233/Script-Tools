@@ -276,7 +276,7 @@ SINGBOX_TEMPLATE = """
         "type": "urltest",
         "tag": "auto",
         "url": "https://www.gstatic.com/generate_204",
-        "interval": "3m",
+        "interval": "10m",
         "tolerance": 150,
         "interrupt_exist_connections": true,
         "outbounds": []

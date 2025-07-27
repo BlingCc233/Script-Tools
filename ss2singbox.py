@@ -139,7 +139,7 @@ SINGBOX_TEMPLATE = """
         {
           "action": "route",
           "clash_mode": "Global",
-          "outbound": "global"
+          "outbound": "GLOBAL"
         },
         {
           "protocol": "quic",

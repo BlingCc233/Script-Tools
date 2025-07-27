@@ -107,7 +107,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Google",
@@ -115,7 +116,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Telegram",
@@ -123,7 +125,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Twitter",
@@ -131,7 +134,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Facebook",
@@ -139,7 +143,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "BiliBili",
@@ -155,7 +160,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Spotify",
@@ -171,7 +177,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Netflix",
@@ -179,7 +186,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Disney+",
@@ -187,7 +195,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "Apple",
@@ -227,7 +236,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "China",
@@ -243,7 +253,8 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "direct",
         "Proxy"
-      ]
+      ],
+      "default": "Proxy"
     },
     {
       "tag": "auto",

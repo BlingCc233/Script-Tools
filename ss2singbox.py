@@ -16,7 +16,7 @@ SINGBOX_TEMPLATE = """
   },
   "experimental": {
     "clash_api": {
-      "external_controller": "127.0.0.1:9090",
+      "external_controller": "0.0.0.0:9095",
       "external_ui": "ui",
       "secret": "",
       "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
@@ -89,7 +89,7 @@ SINGBOX_TEMPLATE = """
       "tag": "mixed-in",
       "type": "mixed",
       "listen": "0.0.0.0",
-      "listen_port": 10808
+      "listen_port": 10233
     }
   ],
   "outbounds": [

@@ -98,7 +98,8 @@ SINGBOX_TEMPLATE = """
       "type": "selector",
       "outbounds": [
         "auto",
-        "direct"
+        "direct",
+        "防失联(备用/勿滥用)"
       ]
     },
     {
@@ -115,7 +116,8 @@ SINGBOX_TEMPLATE = """
       "type": "selector",
       "outbounds": [
         "direct",
-        "Proxy"
+        "Proxy",
+        "防失联(备用/勿滥用)"
       ],
       "default": "Proxy"
     },
@@ -259,7 +261,9 @@ SINGBOX_TEMPLATE = """
     {
       "tag": "auto",
       "type": "urltest",
-      "outbounds": [],
+      "outbounds": [
+        "防失联(备用/勿滥用)"
+      ],
       "url": "http://www.gstatic.com/generate_204",
       "interval": "10m",
       "tolerance": 150
@@ -267,6 +271,14 @@ SINGBOX_TEMPLATE = """
     {
       "type": "direct",
       "tag": "direct"
+    },
+    {
+      "type": "socks",
+      "tag": "防失联(备用/勿滥用)",
+      "server": "112.86.142.197",
+      "server_port": 7781,
+      "version": "5",
+      "username": "Og%3D%3D"
     }
   ],
   "route": {

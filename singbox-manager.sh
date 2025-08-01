@@ -266,6 +266,7 @@ manage_service() {
             elif [[ "$ACTION" == "restart" ]]; then
                 $SUDO_CMD launchctl unload -w "$PLIST_PATH"
                 sleep 1
+                $SUDO_CMD kill -9 $(lsof -t -i :9095)
                 $SUDO_CMD launchctl load -w "$PLIST_PATH"
             elif [[ "$ACTION" == "status" ]]; then
                 $SUDO_CMD launchctl list | grep "${SERVICE_NAME}" || echo "服务未运行或未加载"

@@ -11,7 +11,7 @@
 # 请根据你的情况修改以下变量
 
 # 1. sing-box 配置文件的下载地址
-CONFIG_URL="https://cdn.blingcc.eu.org/s/aabbcc112233"
+CONFIG_URL="https://cdn.blingcc.eu.org/s/"
 
 # 2. sing-box 的安装目录
 # 脚本会将 sing-box 可执行文件和配置文件都放在这里
@@ -27,7 +27,7 @@ SERVICE_NAME="singbox.service"
 
 # 5. 配置文件更新周期 (分钟)
 # 1440 分钟 = 24 小时
-UPDATE_INTERVAL_MIN=1440
+UPDATE_INTERVAL_MIN=1430
 
 #--- 脚本核心逻辑 ---
 # (通常无需修改以下内容)
@@ -86,7 +86,7 @@ check_deps() {
 # 更新配置文件并重启服务
 update_config_and_restart() {
     log_info "正在从 ${CONFIG_URL} 下载新的配置文件..."
-    if ! $SUDO_CMD curl -L -A "sing-box" -o "${CONFIG_PATH}.tmp" "$CONFIG_URL"; then
+    if ! $SUDO_CMD curl -L -s -A "sing-box" -o "${CONFIG_PATH}.tmp" "$CONFIG_URL"; then
         log_error "下载配置文件失败。"
         $SUDO_CMD rm -f "${CONFIG_PATH}.tmp"
         return 1
@@ -120,7 +120,7 @@ install_service() {
     log_info "已设置 ${SINGBOX_EXEC_PATH} 为可执行。"
 
     log_info "正在下载初始配置文件..."
-    if ! $SUDO_CMD curl -L -A "sing-box" -o "$CONFIG_PATH" "$CONFIG_URL"; then
+    if ! $SUDO_CMD curl -L -s -A "sing-box" -o "$CONFIG_PATH" "$CONFIG_URL"; then
         log_error "下载初始配置文件失败，请检查 URL: ${CONFIG_URL}"
         exit 1
     fi
@@ -247,8 +247,6 @@ uninstall_service() {
     log_info "正在移除 cron 定时任务..."
     (crontab -l 2>/dev/null | grep -v "singbox-manager.sh update-config") | crontab -
 
-    log_info "正在删除安装目录: ${INSTALL_DIR}"
-    $SUDO_CMD rm -rf "$INSTALL_DIR"
 
     log_info "卸载完成！"
 }

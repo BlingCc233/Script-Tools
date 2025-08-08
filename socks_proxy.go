@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/schollz/progressbar/v3" 
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/net/proxy"
 )
 
@@ -26,8 +26,38 @@ const (
 	defaultMaxWorkers = 10
 	httpClientTimeout = 10 * time.Second
 	socksDialTimeout  = 10 * time.Second
-	socksTestURL = "http://clients3.google.com/generate_204"
+	socksTestURL      = "http://clients3.google.com/generate_204"
+	// 定义要添加的 Bearer Token
+	bearerToken = "123456"
 )
+
+// --- [新增] 自定义 Transport 用于添加 Authorization 头 ---
+// headerAuthTransport 是一个 http.RoundTripper，它会在每个请求发送前
+// 添加一个 Authorization 头。
+type headerAuthTransport struct {
+	// Transport 是底层的 http.RoundTripper，用于实际发送请求。
+	// 它可以是 http.DefaultTransport，也可以是其他自定义的 Transport（例如用于代理的 Transport）。
+	Transport http.RoundTripper
+}
+
+// RoundTrip 实现了 http.RoundTripper 接口。
+// 它会克隆原始请求，添加 Authorization 头，然后通过底层 Transport 发送。
+func (t *headerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 为了不修改原始请求对象，我们克隆它。
+	// 这在重试或中间件场景中是很好的实践。
+	reqClone := req.Clone(req.Context())
+	reqClone.Header.Set("Authorization", "Bearer "+bearerToken)
+
+	// 使用底层 Transport 执行请求。
+	// 如果 t.Transport 为 nil，则使用 http.DefaultTransport。
+	transport := t.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	return transport.RoundTrip(reqClone)
+}
+
+// -----------------------------------------------------------
 
 type ConfigResponse struct {
 	AllowLan  bool   `json:"allow-lan"`
@@ -51,9 +81,15 @@ var (
 	nameMutex  = &sync.Mutex{}
 	outputFile *os.File
 	outputLock = &sync.Mutex{}
-	// 这个httpClient用于直接连接，不通过代理
+	// --- [修改] 修改 httpClient 以使用自定义的 Transport ---
+	// 这个 httpClient 用于直接连接，不通过代理。
+	// 我们用 headerAuthTransport 包装了默认的 transport，
+	// 这样所有通过此客户端发出的请求都会自动带上 Authorization 头。
 	httpClient = &http.Client{
 		Timeout: httpClientTimeout,
+		Transport: &headerAuthTransport{
+			Transport: http.DefaultTransport,
+		},
 	}
 )
 
@@ -70,7 +106,6 @@ func getUniqueName(baseName string) string {
 	return fmt.Sprintf("%s%d", baseName, count)
 }
 
-// processRow 现在接收一个 progressbar.ProgressBar 指针
 func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	defer func() {
 		if bar != nil {
@@ -82,13 +117,8 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	log.Printf("处理: IP=%s, Port=%s, City=%s\n", task.IP, task.Port, task.City)
 
 	configsURL := fmt.Sprintf("http://%s:%s/configs", task.IP, task.Port)
-	req, err := http.NewRequest("GET", configsURL, nil)
-	if err != nil {
-		log.Printf("错误: 无法创建GET请求 %s: %v\n", configsURL, err)
-		return
-	}
-
-	resp, err := httpClient.Do(req)
+	// 使用 httpClient.Get，它会自动使用我们配置好的带 Authorization 头的 Transport
+	resp, err := httpClient.Get(configsURL)
 	if err != nil {
 		log.Printf("错误: GET %s 失败: %v\n", configsURL, err)
 		return
@@ -123,6 +153,7 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 			log.Printf("错误: 无法创建PATCH请求 %s: %v\n", configsURL, err)
 			return
 		}
+		// 只需要设置 Content-Type，Authorization 会由 httpClient 的 Transport 自动添加
 		patchReq.Header.Set("Content-Type", "application/json")
 
 		patchResp, err := httpClient.Do(patchReq)
@@ -163,23 +194,26 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 		return
 	}
 
-	// --- [开始] 修改SOCKS连通性测试 ---
 	// 创建一个使用SOCKS5代理的http.Transport
-	// golang.org/x/net/proxy.Dialer 实现了 DialContext 方法
 	proxyTransport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return dialer.Dial(network, addr)
 		},
 	}
 
+	// --- [修改] 修改 proxyClient 以使用自定义的 Transport ---
 	// 创建一个专门用于通过代理测试的http.Client
-	// 注意：不能复用全局的httpClient，因为它需要直连API
+	// 我们用 headerAuthTransport 包装了 SOCKS 代理的 Transport，
+	// 这样通过代理发出的请求也会自动带上 Authorization 头。
 	proxyClient := &http.Client{
-		Transport: proxyTransport,
-		Timeout:   httpClientTimeout, // 复用超时设置
+		Transport: &headerAuthTransport{
+			Transport: proxyTransport,
+		},
+		Timeout: httpClientTimeout,
 	}
 
 	log.Printf("信息: %s:%s - 通过SOCKS代理测试URL: %s\n", task.IP, task.Port, socksTestURL)
+	// proxyClient.Get 同样会自动添加 Authorization 头
 	getResp, err := proxyClient.Get(socksTestURL)
 	if err != nil {
 		log.Printf("错误: %s:%s - 通过SOCKS代理请求 %s 失败: %v\n", task.IP, task.Port, socksTestURL, err)
@@ -187,14 +221,12 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	}
 	defer getResp.Body.Close()
 
-	// Google的generate_204端点在成功时返回204 No Content状态码
 	if getResp.StatusCode != http.StatusNoContent {
 		log.Printf("错误: %s:%s - SOCKS代理测试返回非预期的状态码 %d (期望 %d) from %s\n", task.IP, task.Port, getResp.StatusCode, http.StatusNoContent, socksTestURL)
 		return
 	}
 
 	log.Printf("成功: %s:%s - SOCKS5代理连通性测试成功 (URL: %s, Status: %s)\n", task.IP, task.Port, socksTestURL, getResp.Status)
-	// --- [结束] 修改SOCKS连通性测试 ---
 
 	uniqueCityName := getUniqueName(task.City)
 	encodedCityName := url.PathEscape(uniqueCityName)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -16,16 +17,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/schollz/progressbar/v3" // 导入进度条库
+	"github.com/schollz/progressbar/v3" 
 	"golang.org/x/net/proxy"
 )
 
 const (
-	outputFileName      = "output.txt"
-	defaultMaxWorkers   = 10
-	httpClientTimeout   = 10 * time.Second
-	socksDialTimeout    = 10 * time.Second
-	socksTestTargetAddr = "google.com:80"
+	outputFileName    = "output.txt"
+	defaultMaxWorkers = 10
+	httpClientTimeout = 10 * time.Second
+	socksDialTimeout  = 10 * time.Second
+	socksTestURL = "http://clients3.google.com/generate_204"
 )
 
 type ConfigResponse struct {
@@ -50,6 +51,7 @@ var (
 	nameMutex  = &sync.Mutex{}
 	outputFile *os.File
 	outputLock = &sync.Mutex{}
+	// 这个httpClient用于直接连接，不通过代理
 	httpClient = &http.Client{
 		Timeout: httpClientTimeout,
 	}
@@ -71,8 +73,8 @@ func getUniqueName(baseName string) string {
 // processRow 现在接收一个 progressbar.ProgressBar 指针
 func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	defer func() {
-		if bar != nil { // 安全检查，尽管在这里它总会被传递
-			bar.Add(1) // 每处理完一个任务，进度条增加1
+		if bar != nil {
+			bar.Add(1)
 		}
 		wg.Done()
 	}()
@@ -161,13 +163,38 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 		return
 	}
 
-	conn, err := dialer.Dial("tcp", socksTestTargetAddr)
+	// --- [开始] 修改SOCKS连通性测试 ---
+	// 创建一个使用SOCKS5代理的http.Transport
+	// golang.org/x/net/proxy.Dialer 实现了 DialContext 方法
+	proxyTransport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		},
+	}
+
+	// 创建一个专门用于通过代理测试的http.Client
+	// 注意：不能复用全局的httpClient，因为它需要直连API
+	proxyClient := &http.Client{
+		Transport: proxyTransport,
+		Timeout:   httpClientTimeout, // 复用超时设置
+	}
+
+	log.Printf("信息: %s:%s - 通过SOCKS代理测试URL: %s\n", task.IP, task.Port, socksTestURL)
+	getResp, err := proxyClient.Get(socksTestURL)
 	if err != nil {
-		log.Printf("错误: %s:%s - SOCKS5连接测试失败 (%s via %s): %v\n", task.IP, task.Port, socksTestTargetAddr, socksAddr, err)
+		log.Printf("错误: %s:%s - 通过SOCKS代理请求 %s 失败: %v\n", task.IP, task.Port, socksTestURL, err)
 		return
 	}
-	conn.Close()
-	log.Printf("成功: %s:%s - SOCKS5连接测试成功 (%s via %s)\n", task.IP, task.Port, socksTestTargetAddr, socksAddr)
+	defer getResp.Body.Close()
+
+	// Google的generate_204端点在成功时返回204 No Content状态码
+	if getResp.StatusCode != http.StatusNoContent {
+		log.Printf("错误: %s:%s - SOCKS代理测试返回非预期的状态码 %d (期望 %d) from %s\n", task.IP, task.Port, getResp.StatusCode, http.StatusNoContent, socksTestURL)
+		return
+	}
+
+	log.Printf("成功: %s:%s - SOCKS5代理连通性测试成功 (URL: %s, Status: %s)\n", task.IP, task.Port, socksTestURL, getResp.Status)
+	// --- [结束] 修改SOCKS连通性测试 ---
 
 	uniqueCityName := getUniqueName(task.City)
 	encodedCityName := url.PathEscape(uniqueCityName)
@@ -183,7 +210,6 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 }
 
 // countCsvDataRows 计算CSV文件中的数据行数（不包括表头）
-// 它只计算那些可以被csv.Reader成功解析的行。
 func countCsvDataRows(filePath string, header []string, ipIdx, portIdx, cityIdx int) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -209,16 +235,11 @@ func countCsvDataRows(filePath string, header []string, ipIdx, portIdx, cityIdx 
 			break
 		}
 		if err != nil {
-			// 如果某行解析错误，我们选择跳过它，不计入总数，
-			// 因为主处理循环可能也会跳过它或因错误停止。
-			// 或者，你可以选择记录一个警告并继续计数，取决于你希望进度条如何表现。
 			log.Printf("警告: 计数CSV行时，第 %d 行解析错误: %v。此行将不计入进度条总数。\n", lineNumber, err)
 			continue
 		}
 
-		// 应用与主处理循环中相同的基本验证逻辑
 		if len(record) <= ipIdx || len(record) <= portIdx || len(record) <= cityIdx {
-			// log.Printf("警告: 计数CSV行时，第 %d 行数据列数不足, 跳过计数\n", lineNumber)
 			continue
 		}
 
@@ -227,7 +248,6 @@ func countCsvDataRows(filePath string, header []string, ipIdx, portIdx, cityIdx 
 		city := strings.TrimSpace(record[cityIdx])
 
 		if ip == "" || port == "" || city == "" {
-			// log.Printf("警告: 计数CSV行时，第 %d 行数据不完整, 跳过计数\n", lineNumber)
 			continue
 		}
 		rowCount++
@@ -282,21 +302,17 @@ func main() {
 	}
 	log.Printf("使用最大并发数: %d\n", maxWorkers)
 
-	// 预先读取表头以获取索引，用于精确计数
-	// 注意：这里我们打开文件一次获取表头，然后countCsvDataRows会再次打开。
-	// 也可以传递reader给countCsvDataRows，但需要重置。简单起见，分开打开。
 	tempCsvFileForHeader, err := os.Open(csvFilePath)
 	if err != nil {
 		log.Fatalf("错误: 无法打开CSV文件 %s 以读取表头: %v\n", csvFilePath, err)
 	}
 	tempReaderForHeader := csv.NewReader(tempCsvFileForHeader)
 	headerForCount, ipIdxForCount, portIdxForCount, cityIdxForCount, err := getCsvHeaderAndIndices(tempReaderForHeader)
-	tempCsvFileForHeader.Close() // 关闭临时文件
+	tempCsvFileForHeader.Close()
 	if err != nil {
 		log.Fatalf("错误: 解析CSV表头失败（用于计数）: %v\n", err)
 	}
-	
-	// 计算将要处理的总任务数 (数据行数)
+
 	totalTasks, err := countCsvDataRows(csvFilePath, headerForCount, ipIdxForCount, portIdxForCount, cityIdxForCount)
 	if err != nil {
 		log.Fatalf("错误: 计算CSV行数失败: %v\n", err)
@@ -307,17 +323,14 @@ func main() {
 	}
 	log.Printf("信息: CSV文件 '%s' 中找到 %d 个可处理的数据行。\n", csvFilePath, totalTasks)
 
-	// 初始化进度条
-	// 将进度条输出到 os.Stderr，这样日志可以正常输出到 os.Stderr 而不会被覆盖太多
-	// （log默认也输出到Stderr）
 	bar := progressbar.NewOptions(totalTasks,
 		progressbar.OptionSetDescription("处理CSV行..."),
-		progressbar.OptionSetWriter(os.Stderr), // 确保进度条和日志输出到相同的地方，但progressbar会处理重绘
+		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionShowCount(),
-		progressbar.OptionShowIts(), // items per second
+		progressbar.OptionShowIts(),
 		progressbar.OptionSetElapsedTime(true),
 		progressbar.OptionSetPredictTime(true),
-		progressbar.OptionClearOnFinish(), // 完成后清除进度条
+		progressbar.OptionClearOnFinish(),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetTheme(progressbar.Theme{
 			Saucer:        "=",
@@ -328,14 +341,12 @@ func main() {
 		}),
 	)
 
-	// 打开CSV文件进行实际处理
 	csvFile, err := os.Open(csvFilePath)
 	if err != nil {
 		log.Fatalf("错误: 无法打开CSV文件 %s: %v\n", csvFilePath, err)
 	}
 	defer csvFile.Close()
 
-	// 创建或打开输出文件
 	outputFile, err = os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf("错误: 无法打开或创建输出文件 %s: %v\n", outputFileName, err)
@@ -343,7 +354,6 @@ func main() {
 	defer outputFile.Close()
 
 	reader := csv.NewReader(csvFile)
-	// 读取表头并获取列索引 (这次用于实际处理)
 	_, ipIdx, portIdx, cityIdx, err := getCsvHeaderAndIndices(reader)
 	if err != nil {
 		log.Fatalf("错误: %v\n", err)
@@ -355,12 +365,12 @@ func main() {
 	for i := 0; i < maxWorkers; i++ {
 		go func() {
 			for task := range taskQueue {
-				processRow(task, &wg, bar) // 将bar传递给processRow
+				processRow(task, &wg, bar)
 			}
 		}()
 	}
 
-	lineNumber := 1 // 行号从表头之后开始
+	lineNumber := 1
 	for {
 		lineNumber++
 		record, err := reader.Read()
@@ -369,10 +379,6 @@ func main() {
 		}
 		if err != nil {
 			log.Printf("错误: 读取CSV文件第 %d 行失败: %v, 跳过\n", lineNumber, err)
-			// 注意：如果在这里跳过，并且countCsvDataRows也因为这个错误跳过了计数，
-			// 那么进度条的总数和实际尝试的任务数仍然可能匹配。
-			// 如果countCsvDataRows没有跳过，但这里跳过了，进度条可能不会达到100%。
-			// 当前的countCsvDataRows会尝试跳过错误行，所以应该还好。
 			continue
 		}
 
@@ -390,18 +396,12 @@ func main() {
 			continue
 		}
 
-		// 此时，我们认为这是一个有效的任务，会计入wg
 		wg.Add(1)
 		taskQueue <- Task{IP: ip, Port: portStr, City: city}
 	}
 
 	close(taskQueue)
 	wg.Wait()
-
-	// 手动完成进度条，以防万一有任务被跳过，但wg.Add没有相应减少
-	// （虽然在此设计中，wg.Add仅对有效任务调用，所以bar.Finish()可能非必需，
-	//  但OptionClearOnFinish通常会在wg.Wait()后，所有bar.Add(1)完成后自动处理）
-	// bar.Finish() // OptionClearOnFinish 应该能处理好，所以这行可以省略
 
 	log.Println("所有任务处理完毕.")
 }

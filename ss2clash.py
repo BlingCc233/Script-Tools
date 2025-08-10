@@ -146,7 +146,7 @@ proxy-groups:
     type: url-test
     proxies:
       []
-    url: "http://www.gstatic.com/generate_204"
+    url: "http://clients3.google.com/generate_204"
     interval: 600
     tolerance: 150
   - name: 📲 Telegram
@@ -9277,16 +9277,6 @@ def parse_socks_link(line_number, link_string):
             'port': parsed_url.port,
             'udp': True  # SOCKS5 代理通常建议开启 UDP转发
         }
-
-        # 处理认证信息
-        username = parsed_url.username
-        password = parsed_url.password
-        
-        # 只有在用户名或密码存在时才添加到配置中
-        if username:
-            clash_proxy['username'] = username
-        if password:
-            clash_proxy['password'] = password
         
         return clash_proxy
 

@@ -19,7 +19,7 @@ SINGBOX_TEMPLATE = """
       "external_controller": "0.0.0.0:9095",
       "external_ui": "ui",
       "secret": "",
-      "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
+      "external_ui_download_url": "https://gh-proxy.com/https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip",
       "external_ui_download_detour": "direct",
       "default_mode": "rule"
     },
@@ -264,7 +264,7 @@ SINGBOX_TEMPLATE = """
       "outbounds": [
         "防失联(备用/勿滥用)"
       ],
-      "url": "http://www.gstatic.com/generate_204",
+      "url": "http://clients3.google.com/generate_204",
       "interval": "10m",
       "tolerance": 150
     },
@@ -676,15 +676,6 @@ def parse_socks_to_singbox_outbound(line_number, link_string):
             'server_port': parsed_url.port,
             'version': '5'
         }
-
-        # 处理认证信息
-        username = parsed_url.username
-        password = parsed_url.password
-        
-        if username:
-            singbox_outbound['username'] = username
-        if password:
-            singbox_outbound['password'] = password
         
         return singbox_outbound
 

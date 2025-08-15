@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 脚本的目标目录
-TARGET_DIR="/home/"
+TARGET_DIR="TODO"
 # gosocks 可执行文件路径 (假设在 TARGET_DIR 中)
 GOSOCKS_EXEC="./gosocks"
 # gosocks 生成的输出文件名
@@ -32,10 +32,10 @@ fi
 echo "当前工作目录: $(pwd)"
 
 # --- 执行 gosocks 命令 ---
-echo "正在使用 nohup 执行 gosocks 命令: $GOSOCKS_EXEC data.csv 20"
+echo "正在使用 nohup 执行 gosocks 命令: $GOSOCKS_EXEC data.csv 5"
 echo "此命令的输出 (stdout/stderr) 将被重定向到 $TARGET_DIR/$NOHUP_LOG"
 # 执行前确保旧的输出文件(如果存在)不会干扰
-rm -f "$GOSOCKS_RAW_OUTPUT_FILE" "$FINAL_OUTPUT_FILE"
+rm -f  "$FINAL_OUTPUT_FILE"
 
 nohup "$GOSOCKS_EXEC" data.csv 20 > "$NOHUP_LOG" 2>&1 &
 PID1=$!
@@ -46,7 +46,7 @@ echo "gosocks 进程 (PID: $PID1) 已完成。"
 # --- 处理 gosocks 输出 ---
 if [ -f "$GOSOCKS_RAW_OUTPUT_FILE" ]; then
   echo "gosocks 命令生成了 $GOSOCKS_RAW_OUTPUT_FILE。将其重命名/复制为 $FINAL_OUTPUT_FILE"
-  mv "$GOSOCKS_RAW_OUTPUT_FILE" "$FINAL_OUTPUT_FILE"
+  cat "$GOSOCKS_RAW_OUTPUT_FILE" >> "$FINAL_OUTPUT_FILE"
   if [ $? -eq 0 ]; then
     echo "$FINAL_OUTPUT_FILE 已成功创建。"
   else
@@ -100,7 +100,5 @@ echo "用于转换的输入文件是: $TARGET_DIR/$FINAL_OUTPUT_FILE"
 echo "Python 转换输出文件应位于: $TARGET_DIR 下的 $PYTHON_OUTPUT1, $PYTHON_OUTPUT2, $PYTHON_OUTPUT3"
 
 python3 post.py
-
-
 
 exit 0

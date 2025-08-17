@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube to Bilibili Style
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  将YouTube的标签页图标、logo替换为哔哩哔哩的，修改进度条颜色，并将标题中的"YouTube"替换为"哔哩哔哩"。
 // @author       BlingCc (Modified by Gemini)
 // @match        https://www.youtube.com/*
@@ -43,9 +43,12 @@
             .ytp-scrubber-button {
                 border: none !important;
             }
+            .ytp-settings-button.ytp-hdr-quality-badge::after {
+                border-color: #05A3D7 !important;
+            }
 
             .ytp-settings-button.ytp-hd-quality-badge::after, .ytp-settings-button.ytp-hdr-quality-badge::after, .ytp-settings-button.ytp-4k-quality-badge::after, .ytp-settings-button.ytp-5k-quality-badge::after, .ytp-settings-button.ytp-8k-quality-badge::after, .ytp-settings-button.ytp-3d-badge-grey::after, .ytp-settings-button.ytp-3d-badge::after {
-                background-color: #06AEEC !important;
+                background-color: #05A3D7 !important;
             }
 
             .ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment{
@@ -55,6 +58,7 @@
             #progress.ytd-thumbnail-overlay-resume-playback-renderer {
                 background: #06AEEC !important;
             }
+
         `;
 
         const style = document.createElement('style');

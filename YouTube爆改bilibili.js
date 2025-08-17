@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube to Bilibili Style
 // @namespace    http://tampermonkey.net/
-// @version      1.4
-// @description  将YouTube的标签页图标、logo替换为哔哩哔哩的，修改进度条颜色，并将标题中的"YouTube"替换为"哔哩哔哩"。
+// @version      1.5
+// @description  油管爆改哔哩哔哩：将YouTube的标签页图标、logo替换为哔哩哔哩的，修改进度条颜色，并将标题中的"YouTube"替换为"哔哩哔哩"。
 // @author       BlingCc (Modified by Gemini)
 // @match        https://www.youtube.com/*
 // @grant        none
@@ -100,7 +100,7 @@
     function changeTitle() {
         // 使用正则表达式 /youtube/gi 进行全局、不区分大小写的替换
         if (document.title.toLowerCase().includes('youtube')) {
-            document.title = document.title.replace(/youtube/gi, '哔哩哔哩');
+            document.title = document.title.replace(/youtube/gi, '哔哩哔哩 (゜-゜)つロ 干杯~~bilibili');
         }
     }
 

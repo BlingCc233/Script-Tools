@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube to Bilibili Style
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  油管爆改哔哩哔哩：将YouTube的标签页图标、logo替换为哔哩哔哩的，修改进度条颜色，并将标题中的"YouTube"替换为"哔哩哔哩"。
 // @author       BlingCc (Modified by Gemini)
 // @match        https://www.youtube.com/*
@@ -36,7 +36,7 @@
             /* 进度条拖动圆点和音量条 */
             .ytp-scrubber-button.ytp-swatch-background-color,
             .ytp-volume-slider-handle::before {
-                background: #06AEEC !important;
+                background: #05A3D7 !important;
             }
 
             /* 去除拖动圆点周围的白色边框，使其更融合 */
@@ -57,6 +57,10 @@
 
             #progress.ytd-thumbnail-overlay-resume-playback-renderer {
                 background: #06AEEC !important;
+            }
+
+            #progress.yt-page-navigation-progress {
+                background:linear-gradient(to right,#05A3D7 80%,#06AEEC 100%) !important;
             }
 
         `;

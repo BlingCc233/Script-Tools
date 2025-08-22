@@ -28,17 +28,25 @@ const (
 	socksDialTimeout  = 10 * time.Second
 	socksTestURL      = "http://clients3.google.com/generate_204"
 	ipInfoURL         = "http://ipwho.is"
+	ipApiFallbackURL  = "https://api.ipapi.is"
 	// 可选：用于访问 /configs 的 Bearer Token
 	bearerToken = "123456"
 )
 
-// IP信息响应结构体
+// IP信息响应结构体 (ipwho.is)
 type IPInfoResponse struct {
 	Success     bool   `json:"success"`
 	Country     string `json:"country"`
 	CountryCode string `json:"country_code"`
 	City        string `json:"city"`
 	Region      string `json:"region"`
+}
+
+// IP API 响应结构体 (api.ipapi.is)
+type IPAPIResponse struct {
+	Location struct {
+		Country string `json:"country"`
+	} `json:"location"`
 }
 
 // 自定义 Transport：为每个请求添加 Authorization 头
@@ -103,7 +111,7 @@ func getUniqueName(baseName string) string {
 	return fmt.Sprintf("%s%d", baseName, count)
 }
 
-// 通过SOCKS代理获取IP信息
+// 通过SOCKS代理获取IP信息，带有备用API支持
 func getIPInfoViaProxy(dialer proxy.Dialer, fallbackName string) string {
 	proxyTransport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -116,32 +124,53 @@ func getIPInfoViaProxy(dialer proxy.Dialer, fallbackName string) string {
 		Timeout:   httpClientTimeout,
 	}
 
+	// 尝试第一个API: ipwho.is
 	log.Printf("信息: 通过SOCKS代理获取IP信息: %s\n", ipInfoURL)
 	resp, err := client.Get(ipInfoURL)
 	if err != nil {
-		log.Printf("警告: 通过SOCKS代理获取IP信息失败: %v，使用回退名称: %s\n", err, fallbackName)
-		return fallbackName
-	}
-	defer resp.Body.Close()
+		log.Printf("警告: 通过SOCKS代理获取IP信息失败 (%s): %v，尝试备用API\n", ipInfoURL, err)
+	} else {
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("警告: IP信息服务返回状态码 %d，使用回退名称: %s\n", resp.StatusCode, fallbackName)
-		return fallbackName
-	}
-
-	var ipInfo IPInfoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ipInfo); err != nil {
-		log.Printf("警告: 解析IP信息JSON失败: %v，使用回退名称: %s\n", err, fallbackName)
-		return fallbackName
-	}
-
-	if !ipInfo.Success || ipInfo.Country == "" {
-		log.Printf("警告: IP信息查询不成功或国家为空，使用回退名称: %s\n", fallbackName)
-		return fallbackName
+		if resp.StatusCode == http.StatusOK {
+			var ipInfo IPInfoResponse
+			if err := json.NewDecoder(resp.Body).Decode(&ipInfo); err == nil {
+				if ipInfo.Success && ipInfo.Country != "" {
+					log.Printf("成功: 从ipwho.is获取到真实国家信息: %s (原名称: %s)\n", ipInfo.Country, fallbackName)
+					return ipInfo.Country
+				}
+			}
+		}
+		log.Printf("警告: ipwho.is返回状态码 %d 或解析失败，尝试备用API\n", resp.StatusCode)
 	}
 
-	log.Printf("成功: 获取到真实国家信息: %s (原名称: %s)\n", ipInfo.Country, fallbackName)
-	return ipInfo.Country
+	// 尝试备用API: api.ipapi.is
+	log.Printf("信息: 尝试备用API获取IP信息: %s\n", ipApiFallbackURL)
+	resp2, err := client.Get(ipApiFallbackURL)
+	if err != nil {
+		log.Printf("警告: 通过SOCKS代理获取备用IP信息失败 (%s): %v，使用回退名称: %s\n", ipApiFallbackURL, err, fallbackName)
+		return fallbackName
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusOK {
+		log.Printf("警告: 备用IP信息服务返回状态码 %d，使用回退名称: %s\n", resp2.StatusCode, fallbackName)
+		return fallbackName
+	}
+
+	var ipAPIInfo IPAPIResponse
+	if err := json.NewDecoder(resp2.Body).Decode(&ipAPIInfo); err != nil {
+		log.Printf("警告: 解析备用IP信息JSON失败: %v，使用回退名称: %s\n", err, fallbackName)
+		return fallbackName
+	}
+
+	if ipAPIInfo.Location.Country == "" {
+		log.Printf("警告: 备用API返回的国家信息为空，使用回退名称: %s\n", fallbackName)
+		return fallbackName
+	}
+
+	log.Printf("成功: 从api.ipapi.is获取到真实国家信息: %s (原名称: %s)\n", ipAPIInfo.Location.Country, fallbackName)
+	return ipAPIInfo.Location.Country
 }
 
 func writeOutput(ip string, port int, countryName string) {

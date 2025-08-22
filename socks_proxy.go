@@ -27,29 +27,30 @@ const (
 	httpClientTimeout = 10 * time.Second
 	socksDialTimeout  = 10 * time.Second
 	socksTestURL      = "http://clients3.google.com/generate_204"
-	// 定义要添加的 Bearer Token
+	ipInfoURL         = "http://ipwho.is"
+	// 可选：用于访问 /configs 的 Bearer Token
 	bearerToken = "123456"
 )
 
-// --- [新增] 自定义 Transport 用于添加 Authorization 头 ---
-// headerAuthTransport 是一个 http.RoundTripper，它会在每个请求发送前
-// 添加一个 Authorization 头。
+// IP信息响应结构体
+type IPInfoResponse struct {
+	Success     bool   `json:"success"`
+	Country     string `json:"country"`
+	CountryCode string `json:"country_code"`
+	City        string `json:"city"`
+	Region      string `json:"region"`
+}
+
+// 自定义 Transport：为每个请求添加 Authorization 头
 type headerAuthTransport struct {
-	// Transport 是底层的 http.RoundTripper，用于实际发送请求。
-	// 它可以是 http.DefaultTransport，也可以是其他自定义的 Transport（例如用于代理的 Transport）。
 	Transport http.RoundTripper
 }
 
-// RoundTrip 实现了 http.RoundTripper 接口。
-// 它会克隆原始请求，添加 Authorization 头，然后通过底层 Transport 发送。
 func (t *headerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// 为了不修改原始请求对象，我们克隆它。
-	// 这在重试或中间件场景中是很好的实践。
 	reqClone := req.Clone(req.Context())
-	reqClone.Header.Set("Authorization", "Bearer "+bearerToken)
-
-	// 使用底层 Transport 执行请求。
-	// 如果 t.Transport 为 nil，则使用 http.DefaultTransport。
+	if bearerToken != "" {
+		reqClone.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
 	transport := t.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -57,13 +58,11 @@ func (t *headerAuthTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	return transport.RoundTrip(reqClone)
 }
 
-// -----------------------------------------------------------
-
 type ConfigResponse struct {
-	AllowLan  bool   `json:"allow-lan"`
-	SocksPort int    `json:"socks-port"`
-	MixedPort int    `json:"mixed-port"`
-	Port      int    `json:"port"`
+	AllowLan  bool `json:"allow-lan"`
+	SocksPort int  `json:"socks-port"`
+	MixedPort int  `json:"mixed-port"`
+	Port      int  `json:"port"`
 }
 
 type PatchPayload struct {
@@ -81,10 +80,8 @@ var (
 	nameMutex  = &sync.Mutex{}
 	outputFile *os.File
 	outputLock = &sync.Mutex{}
-	// --- [修改] 修改 httpClient 以使用自定义的 Transport ---
-	// 这个 httpClient 用于直接连接，不通过代理。
-	// 我们用 headerAuthTransport 包装了默认的 transport，
-	// 这样所有通过此客户端发出的请求都会自动带上 Authorization 头。
+
+	// 直接连接使用的 httpClient（访问 /configs）
 	httpClient = &http.Client{
 		Timeout: httpClientTimeout,
 		Transport: &headerAuthTransport{
@@ -106,131 +103,51 @@ func getUniqueName(baseName string) string {
 	return fmt.Sprintf("%s%d", baseName, count)
 }
 
-func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
-	defer func() {
-		if bar != nil {
-			bar.Add(1)
-		}
-		wg.Done()
-	}()
-
-	log.Printf("处理: IP=%s, Port=%s, City=%s\n", task.IP, task.Port, task.City)
-
-	configsURL := fmt.Sprintf("http://%s:%s/configs", task.IP, task.Port)
-	// 使用 httpClient.Get，它会自动使用我们配置好的带 Authorization 头的 Transport
-	resp, err := httpClient.Get(configsURL)
-	if err != nil {
-		log.Printf("错误: GET %s 失败: %v\n", configsURL, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Printf("错误: GET %s 返回状态码 %d, Body: %s\n", configsURL, resp.StatusCode, string(bodyBytes))
-		return
-	}
-
-	var configData ConfigResponse
-	if err := json.NewDecoder(resp.Body).Decode(&configData); err != nil {
-		log.Printf("错误: 解析 %s 的JSON响应失败: %v\n", configsURL, err)
-		return
-	}
-
-	log.Printf("信息: %s:%s - 初始 allow-lan: %v, socks-port: %d, mixed-port: %d\n", task.IP, task.Port, configData.AllowLan, configData.SocksPort, configData.MixedPort)
-
-	if !configData.AllowLan {
-		log.Printf("信息: %s:%s - allow-lan 为 false, 尝试 PATCH...\n", task.IP, task.Port)
-		patchPayload := PatchPayload{AllowLan: true}
-		payloadBytes, err := json.Marshal(patchPayload)
-		if err != nil {
-			log.Printf("错误: 序列化PATCH payload失败 %s: %v\n", configsURL, err)
-			return
-		}
-
-		patchReq, err := http.NewRequest("PATCH", configsURL, bytes.NewBuffer(payloadBytes))
-		if err != nil {
-			log.Printf("错误: 无法创建PATCH请求 %s: %v\n", configsURL, err)
-			return
-		}
-		// 只需要设置 Content-Type，Authorization 会由 httpClient 的 Transport 自动添加
-		patchReq.Header.Set("Content-Type", "application/json")
-
-		patchResp, err := httpClient.Do(patchReq)
-		if err != nil {
-			log.Printf("错误: PATCH %s 失败: %v\n", configsURL, err)
-			return
-		}
-		defer patchResp.Body.Close()
-
-		if patchResp.StatusCode != http.StatusOK && patchResp.StatusCode != http.StatusNoContent && patchResp.StatusCode != http.StatusAccepted {
-			bodyBytes, _ := io.ReadAll(patchResp.Body)
-			log.Printf("错误: PATCH %s 返回状态码 %d, Body: %s\n", configsURL, patchResp.StatusCode, string(bodyBytes))
-			return
-		}
-		log.Printf("信息: %s:%s - PATCH 成功, allow-lan 设置为 true\n", task.IP, task.Port)
-		configData.AllowLan = true
-	}
-
-	socks5Port := configData.SocksPort
-	if socks5Port == 0 {
-		socks5Port = configData.MixedPort
-	}
-
-	if socks5Port == 0 {
-		log.Printf("错误: %s:%s - 未找到有效的SOCKS端口 (socks-port: %d, mixed-port: %d)\n", task.IP, task.Port, configData.SocksPort, configData.MixedPort)
-		return
-	}
-
-	log.Printf("信息: %s:%s - 使用SOCKS端口: %d\n", task.IP, task.Port, socks5Port)
-
-	socksAddr := fmt.Sprintf("%s:%d", task.IP, socks5Port)
-	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, &net.Dialer{
-		Timeout:   socksDialTimeout,
-		KeepAlive: 0,
-	})
-	if err != nil {
-		log.Printf("错误: %s:%s - 创建SOCKS5拨号器失败 (%s): %v\n", task.IP, task.Port, socksAddr, err)
-		return
-	}
-
-	// 创建一个使用SOCKS5代理的http.Transport
+// 通过SOCKS代理获取IP信息
+func getIPInfoViaProxy(dialer proxy.Dialer, fallbackName string) string {
 	proxyTransport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return dialer.Dial(network, addr)
 		},
 	}
 
-	// --- [修改] 修改 proxyClient 以使用自定义的 Transport ---
-	// 创建一个专门用于通过代理测试的http.Client
-	// 我们用 headerAuthTransport 包装了 SOCKS 代理的 Transport，
-	// 这样通过代理发出的请求也会自动带上 Authorization 头。
-	proxyClient := &http.Client{
-		Transport: &headerAuthTransport{
-			Transport: proxyTransport,
-		},
-		Timeout: httpClientTimeout,
+	client := &http.Client{
+		Transport: proxyTransport,
+		Timeout:   httpClientTimeout,
 	}
 
-	log.Printf("信息: %s:%s - 通过SOCKS代理测试URL: %s\n", task.IP, task.Port, socksTestURL)
-	// proxyClient.Get 同样会自动添加 Authorization 头
-	getResp, err := proxyClient.Get(socksTestURL)
+	log.Printf("信息: 通过SOCKS代理获取IP信息: %s\n", ipInfoURL)
+	resp, err := client.Get(ipInfoURL)
 	if err != nil {
-		log.Printf("错误: %s:%s - 通过SOCKS代理请求 %s 失败: %v\n", task.IP, task.Port, socksTestURL, err)
-		return
+		log.Printf("警告: 通过SOCKS代理获取IP信息失败: %v，使用回退名称: %s\n", err, fallbackName)
+		return fallbackName
 	}
-	defer getResp.Body.Close()
+	defer resp.Body.Close()
 
-	if getResp.StatusCode != http.StatusNoContent {
-		log.Printf("错误: %s:%s - SOCKS代理测试返回非预期的状态码 %d (期望 %d) from %s\n", task.IP, task.Port, getResp.StatusCode, http.StatusNoContent, socksTestURL)
-		return
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("警告: IP信息服务返回状态码 %d，使用回退名称: %s\n", resp.StatusCode, fallbackName)
+		return fallbackName
 	}
 
-	log.Printf("成功: %s:%s - SOCKS5代理连通性测试成功 (URL: %s, Status: %s)\n", task.IP, task.Port, socksTestURL, getResp.Status)
+	var ipInfo IPInfoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&ipInfo); err != nil {
+		log.Printf("警告: 解析IP信息JSON失败: %v，使用回退名称: %s\n", err, fallbackName)
+		return fallbackName
+	}
 
-	uniqueCityName := getUniqueName(task.City)
-	encodedCityName := url.PathEscape(uniqueCityName)
-	outputLine := fmt.Sprintf("socks://Og%%3D%%3D@%s:%d#%s\n", task.IP, socks5Port, encodedCityName)
+	if !ipInfo.Success || ipInfo.Country == "" {
+		log.Printf("警告: IP信息查询不成功或国家为空，使用回退名称: %s\n", fallbackName)
+		return fallbackName
+	}
+
+	log.Printf("成功: 获取到真实国家信息: %s (原名称: %s)\n", ipInfo.Country, fallbackName)
+	return ipInfo.Country
+}
+
+func writeOutput(ip string, port int, countryName string) {
+	uniqueCountryName := getUniqueName(countryName)
+	encodedCountryName := url.PathEscape(uniqueCountryName)
+	outputLine := fmt.Sprintf("socks://Og%%3D%%3D@%s:%d#%s\n", ip, port, encodedCountryName)
 
 	outputLock.Lock()
 	defer outputLock.Unlock()
@@ -239,6 +156,215 @@ func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
 	} else {
 		log.Printf("写入: %s", outputLine)
 	}
+}
+
+func testSocks(ip string, port int, withAuthHeader bool) bool {
+	socksAddr := fmt.Sprintf("%s:%d", ip, port)
+
+	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, &net.Dialer{
+		Timeout:   socksDialTimeout,
+		KeepAlive: 0,
+	})
+	if err != nil {
+		log.Printf("错误: 创建SOCKS5拨号器失败 (%s): %v\n", socksAddr, err)
+		return false
+	}
+
+	proxyTransport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		},
+	}
+
+	var rt http.RoundTripper = proxyTransport
+	if withAuthHeader {
+		// 仅当需要为代理路径添加 Authorization 头时包一层
+		rt = &headerAuthTransport{Transport: proxyTransport}
+	}
+
+	client := &http.Client{
+		Transport: rt,
+		Timeout:   httpClientTimeout,
+	}
+
+	log.Printf("信息: 通过SOCKS代理测试 %s -> %s\n", socksAddr, socksTestURL)
+	resp, err := client.Get(socksTestURL)
+	if err != nil {
+		log.Printf("错误: SOCKS代理 %s 请求失败: %v\n", socksAddr, err)
+		return false
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		log.Printf("错误: SOCKS代理 %s 返回状态码 %d (期望 %d)\n", socksAddr, resp.StatusCode, http.StatusNoContent)
+		return false
+	}
+
+	log.Printf("成功: SOCKS代理 %s 连通性测试通过\n", socksAddr)
+	return true
+}
+
+func fallbackTestDefaultPorts(task Task) {
+	log.Printf("回退: 尝试直接测试默认端口 7890/7891/7893 的SOCKS连通性 (IP=%s, City=%s)\n", task.IP, task.City)
+	for _, p := range []int{7890, 7891, 7893} {
+		if testSocks(task.IP, p, false) {
+			// 为回退测试创建SOCKS拨号器，用于获取IP信息
+			socksAddr := fmt.Sprintf("%s:%d", task.IP, p)
+			dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, &net.Dialer{
+				Timeout:   socksDialTimeout,
+				KeepAlive: 0,
+			})
+			if err != nil {
+				log.Printf("警告: 回退测试中创建SOCKS5拨号器失败，使用原始城市名: %v\n", err)
+				writeOutput(task.IP, p, task.City)
+				continue
+			}
+
+			// 获取真实国家信息
+			realCountry := getIPInfoViaProxy(dialer, task.City)
+			writeOutput(task.IP, p, realCountry)
+		}
+	}
+}
+
+func processRow(task Task, wg *sync.WaitGroup, bar *progressbar.ProgressBar) {
+	defer func() {
+		if bar != nil {
+			_ = bar.Add(1)
+		}
+		wg.Done()
+	}()
+
+	log.Printf("处理: IP=%s, Port=%s, City=%s\n", task.IP, task.Port, task.City)
+
+	// 标记是否"到达了通过SOCKS代理发起测试请求"的步骤
+	// 只有到达该步骤，才视为原流程已开始 SOCKS 测试，不再回退。
+	enteredSocksTestStep := false
+
+	// 1) 原本流程：读取 /configs
+	configsURL := fmt.Sprintf("http://%s:%s/configs", task.IP, task.Port)
+	resp, err := httpClient.Get(configsURL)
+	if err != nil {
+		log.Printf("错误: GET %s 失败: %v\n", configsURL, err)
+		fallbackTestDefaultPorts(task)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("错误: GET %s 返回状态码 %d, Body: %s\n", configsURL, resp.StatusCode, string(bodyBytes))
+		fallbackTestDefaultPorts(task)
+		return
+	}
+
+	var configData ConfigResponse
+	if err := json.NewDecoder(resp.Body).Decode(&configData); err != nil {
+		log.Printf("错误: 解析 %s 的JSON响应失败: %v\n", configsURL, err)
+		fallbackTestDefaultPorts(task)
+		return
+	}
+
+	log.Printf("信息: %s:%s - 初始 allow-lan: %v, socks-port: %d, mixed-port: %d\n", task.IP, task.Port, configData.AllowLan, configData.SocksPort, configData.MixedPort)
+
+	// 2) 若 allow-lan 为 false，尝试 PATCH
+	if !configData.AllowLan {
+		log.Printf("信息: %s:%s - allow-lan 为 false, 尝试 PATCH...\n", task.IP, task.Port)
+		patchPayload := PatchPayload{AllowLan: true}
+		payloadBytes, err := json.Marshal(patchPayload)
+		if err != nil {
+			log.Printf("错误: 序列化PATCH payload失败 %s: %v\n", configsURL, err)
+			fallbackTestDefaultPorts(task)
+			return
+		}
+
+		patchReq, err := http.NewRequest("PATCH", configsURL, bytes.NewBuffer(payloadBytes))
+		if err != nil {
+			log.Printf("错误: 无法创建PATCH请求 %s: %v\n", configsURL, err)
+			fallbackTestDefaultPorts(task)
+			return
+		}
+		patchReq.Header.Set("Content-Type", "application/json")
+
+		patchResp, err := httpClient.Do(patchReq)
+		if err != nil {
+			log.Printf("错误: PATCH %s 失败: %v\n", configsURL, err)
+			fallbackTestDefaultPorts(task)
+			return
+		}
+		defer patchResp.Body.Close()
+
+		if patchResp.StatusCode != http.StatusOK && patchResp.StatusCode != http.StatusNoContent && patchResp.StatusCode != http.StatusAccepted {
+			bodyBytes, _ := io.ReadAll(patchResp.Body)
+			log.Printf("错误: PATCH %s 返回状态码 %d, Body: %s\n", configsURL, patchResp.StatusCode, string(bodyBytes))
+			fallbackTestDefaultPorts(task)
+			return
+		}
+		log.Printf("信息: %s:%s - PATCH 成功, allow-lan 设置为 true\n", task.IP, task.Port)
+		configData.AllowLan = true
+	}
+
+	// 3) 选择 socks 端口
+	socks5Port := configData.SocksPort
+	if socks5Port == 0 {
+		socks5Port = configData.MixedPort
+	}
+	if socks5Port == 0 {
+		log.Printf("错误: %s:%s - 未找到有效的SOCKS端口 (socks-port: %d, mixed-port: %d)\n", task.IP, task.Port, configData.SocksPort, configData.MixedPort)
+		fallbackTestDefaultPorts(task)
+		return
+	}
+	log.Printf("信息: %s:%s - 使用SOCKS端口: %d\n", task.IP, task.Port, socks5Port)
+
+	// 4) 创建 SOCKS 拨号器
+	socksAddr := fmt.Sprintf("%s:%d", task.IP, socks5Port)
+	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, &net.Dialer{
+		Timeout:   socksDialTimeout,
+		KeepAlive: 0,
+	})
+	if err != nil {
+		log.Printf("错误: %s:%s - 创建SOCKS5拨号器失败 (%s): %v\n", task.IP, task.Port, socksAddr, err)
+		fallbackTestDefaultPorts(task)
+		return
+	}
+
+	// 5) 通过代理测试 URL
+	proxyTransport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		},
+	}
+
+	proxyClient := &http.Client{
+		Transport: &headerAuthTransport{Transport: proxyTransport},
+		Timeout:   httpClientTimeout,
+	}
+
+	log.Printf("信息: %s:%s - 通过SOCKS代理测试URL: %s\n", task.IP, task.Port, socksTestURL)
+	enteredSocksTestStep = true // 从这一行起，视为已"到达 socks 试代理这一步"
+
+	getResp, err := proxyClient.Get(socksTestURL)
+	if err != nil {
+		log.Printf("错误: %s:%s - 通过SOCKS代理请求 %s 失败: %v\n", task.IP, task.Port, socksTestURL, err)
+		// 注意：已到达 socks 测试步骤，不再回退。
+		return
+	}
+	defer getResp.Body.Close()
+
+	if getResp.StatusCode != http.StatusNoContent {
+		log.Printf("错误: %s:%s - SOCKS代理测试返回非预期的状态码 %d (期望 %d) from %s\n", task.IP, task.Port, getResp.StatusCode, http.StatusNoContent, socksTestURL)
+		// 注意：已到达 socks 测试步骤，不再回退。
+		return
+	}
+
+	log.Printf("成功: %s:%s - SOCKS5代理连通性测试成功 (URL: %s, Status: %s)\n", task.IP, task.Port, socksTestURL, getResp.Status)
+
+	// 6) 新增功能：通过SOCKS代理获取真实的国家信息
+	realCountry := getIPInfoViaProxy(dialer, task.City)
+	writeOutput(task.IP, socks5Port, realCountry)
+
+	_ = enteredSocksTestStep // 仅用于可读性，逻辑已体现
 }
 
 // countCsvDataRows 计算CSV文件中的数据行数（不包括表头）
@@ -250,16 +376,16 @@ func countCsvDataRows(filePath string, header []string, ipIdx, portIdx, cityIdx 
 	defer file.Close()
 
 	reader := csv.NewReader(file)
-	_, err = reader.Read() // 读取并跳过表头
+	_, err = reader.Read() // 跳过表头
 	if err != nil {
 		if err == io.EOF {
-			return 0, nil // 文件为空或只有表头
+			return 0, nil
 		}
 		return 0, fmt.Errorf("读取CSV表头失败（计数时）: %w", err)
 	}
 
 	rowCount := 0
-	lineNumber := 1 // 从数据行开始计数
+	lineNumber := 1
 	for {
 		lineNumber++
 		record, err := reader.Read()
@@ -289,7 +415,7 @@ func countCsvDataRows(filePath string, header []string, ipIdx, portIdx, cityIdx 
 
 // getCsvHeaderAndIndices 读取CSV头部并返回列名到索引的映射
 func getCsvHeaderAndIndices(reader *csv.Reader) ([]string, int, int, int, error) {
-	header, err := reader.Read() // 读取表头
+	header, err := reader.Read()
 	if err != nil {
 		if err == io.EOF {
 			return nil, -1, -1, -1, fmt.Errorf("CSV文件为空")
@@ -340,7 +466,7 @@ func main() {
 	}
 	tempReaderForHeader := csv.NewReader(tempCsvFileForHeader)
 	headerForCount, ipIdxForCount, portIdxForCount, cityIdxForCount, err := getCsvHeaderAndIndices(tempReaderForHeader)
-	tempCsvFileForHeader.Close()
+	_ = tempCsvFileForHeader.Close()
 	if err != nil {
 		log.Fatalf("错误: 解析CSV表头失败（用于计数）: %v\n", err)
 	}
@@ -377,13 +503,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("错误: 无法打开CSV文件 %s: %v\n", csvFilePath, err)
 	}
-	defer csvFile.Close()
+	defer func() { _ = csvFile.Close() }()
 
 	outputFile, err = os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf("错误: 无法打开或创建输出文件 %s: %v\n", outputFileName, err)
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	reader := csv.NewReader(csvFile)
 	_, ipIdx, portIdx, cityIdx, err := getCsvHeaderAndIndices(reader)

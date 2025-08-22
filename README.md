@@ -16,6 +16,7 @@
 - [那维莱特滋水](https://github.com/BlingCc233/Script-Tools/blob/main/Neuvillette.cpp)（管理员身份运行）
 - [文件拆分合并](https://github.com/BlingCc233/Script-Tools/tree/main/merge)
 - [Win使用Mac快捷键](https://github.com/BlingCc233/Script-Tools/blob/main/WinMac.ahk)
+- [有框你不打？](https://github.com/BlingCc233/Script-Tools/tree/main/Py_ValoTrig)
 
 ## 各种python网络脚本
 

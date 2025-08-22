@@ -18,7 +18,7 @@
 - [Win使用Mac快捷键](https://github.com/BlingCc233/Script-Tools/blob/main/WinMac.ahk)
 - [有框你不打？](https://github.com/BlingCc233/Script-Tools/tree/main/Py_ValoTrig)
 
-## 各种python网络脚本
+## 各种网络脚本
 
 - 乐健签到(已不可用，新版见[单独的库(也不可用了)](https://github.com/BlingCc233/MITM_modules))
 - [河畔爬虫](https://github.com/BlingCc233/Script-Tools/blob/main/uestc_bbs_lottery.py)

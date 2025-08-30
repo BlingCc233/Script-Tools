@@ -9,6 +9,8 @@
 - [粉笔网计时器暂停脚本](https://github.com/BlingCc233/Script-Tools/blob/main/%E7%B2%89%E7%AC%94%E7%BD%91%E8%AE%A1%E6%97%B6%E5%99%A8%E6%9A%82%E5%81%9C%E8%84%9A%E6%9C%AC.js)
 - [粉笔自动答题](https://github.com/BlingCc233/Script-Tools/blob/main/%E7%B2%89%E7%AC%94%E8%87%AA%E5%8A%A8%E7%AD%94%E9%A2%98.js)用法：`F12进入DevTools，在控制台输出中查看答案`
 - [YouTube爆改bilibili](https://github.com/BlingCc233/Script-Tools/blob/main/YouTube%E7%88%86%E6%94%B9bilibili.js)丨给你一个蓝色的油管
+- [谷歌爆改百度](https://github.com/BlingCc233/Script-Tools/blob/main/Google2Baidu.js)
+- [HXD浏览器emby绕过限制](https://github.com/BlingCc233/Script-Tools/blob/main/Emby_Bypass.js)
 
 ## 各种Windows小脚本
 

@@ -98,8 +98,7 @@ SINGBOX_TEMPLATE = """
       "type": "selector",
       "outbounds": [
         "auto",
-        "direct",
-        "防失联(备用/勿滥用)"
+        "direct"
       ]
     },
     {
@@ -116,8 +115,7 @@ SINGBOX_TEMPLATE = """
       "type": "selector",
       "outbounds": [
         "direct",
-        "Proxy",
-        "防失联(备用/勿滥用)"
+        "Proxy"
       ],
       "default": "Proxy"
     },
@@ -242,7 +240,7 @@ SINGBOX_TEMPLATE = """
       "default": "Proxy"
     },
     {
-      "tag": "China",
+      "tag": "CHINA",
       "type": "selector",
       "outbounds": [
         "direct",
@@ -262,7 +260,6 @@ SINGBOX_TEMPLATE = """
       "tag": "auto",
       "type": "urltest",
       "outbounds": [
-        "防失联(备用/勿滥用)"
       ],
       "url": "http://clients3.google.com/generate_204",
       "interval": "10m",
@@ -271,14 +268,6 @@ SINGBOX_TEMPLATE = """
     {
       "type": "direct",
       "tag": "direct"
-    },
-    {
-      "type": "socks",
-      "tag": "防失联(备用/勿滥用)",
-      "server": "112.86.142.197",
-      "server_port": 7781,
-      "version": "5",
-      "username": "Og%3D%3D"
     }
   ],
   "route": {
@@ -328,7 +317,8 @@ SINGBOX_TEMPLATE = """
           "clash.razord.top",
           "yacd.metacubex.one",
           "yacd.haishan.me",
-          "d.metacubex.one"
+          "d.metacubex.one",
+          "cdn.393633.xyz"
         ],
         "outbound": "direct"
       },
@@ -421,6 +411,10 @@ SINGBOX_TEMPLATE = """
           "geosite-hbo",
           "geosite-primevideo"
         ],
+        
+        "domain": [
+            "hxd.as174.de"
+            ],
         "outbound": "Streaming"
       },
       {
@@ -432,7 +426,7 @@ SINGBOX_TEMPLATE = """
           "geoip-cn",
           "geosite-cn"
         ],
-        "outbound": "China"
+        "outbound": "CHINA"
       }
     ],
     "rule_set": [

@@ -1,14 +1,17 @@
 // ==UserScript==
 // @name         Emby Bypass
 // @namespace    http://tampermonkey.net/
-// @version      0.3
+// @version      0.4
 // @description  Intercept and modify fetch requests (URL params & Headers for ALL methods) to hxd.as174.de
 // @author       BlingCc
 // @match        *://hxd.as174.de/*
+// @match        *://cf.bili.rip:8443/*
 // @icon         https://hxd.as174.de/favicon.ico
 // @license      MIT
 // @grant        unsafeWindow
 // @run-at       document-start
+// @downloadURL https://update.greasyfork.org/scripts/547801/Emby%20Bypass.user.js
+// @updateURL https://update.greasyfork.org/scripts/547801/Emby%20Bypass.meta.js
 // ==/UserScript==
 
 (function() {
@@ -29,7 +32,7 @@
         let url = input instanceof Request ? input.url : input.toString();
 
         // 检查请求的 URL 是否匹配目标域名
-        if (url.includes('hxd.as174.de')) {
+        if (url.includes('hxd.as174.de') || url.includes('cf.bili.rip')) {
             console.log('Intercepted fetch request:', url, options ? options.method || 'GET' : 'GET');
 
             // 确保 options 对象存在

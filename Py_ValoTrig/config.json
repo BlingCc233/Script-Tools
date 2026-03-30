@@ -1,9 +1,8 @@
 {
     "shoot_fov": 7,
-    "counter_strafe_fov": 5,
     "keybind": 160,
     "aimkey": 22,
-    "shooting_rate": 250,
+    "shooting_rate": 450,
     "fps": 240.0,
     "hsv_range": [
         [

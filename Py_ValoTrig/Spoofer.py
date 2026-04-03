@@ -35,37 +35,37 @@ def spoof_target(filename):
 
     try:
         with open(filename, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            content = f.read()
+
+        junk_func_pattern = r'\ndef sys_[a-z]+\(\):[\s\S]*?return hash\([a-z]+\)\n'
+        content = re.sub(junk_func_pattern, '', content)
 
         new_uuid = uuid.uuid4().hex
+        
+        lines = content.split('\n')
         processed = []
         
         for line in lines:
             if re.search(r'UUID\s*=\s*"[a-fA-F0-9]{32}"', line):
-                processed.append(f'UUID = "{new_uuid}"\n')
+                processed.append(f'UUID = "{new_uuid}"')
             elif re.match(r'^#\s*\d{15,}', line.strip()):
-                processed.append(random_number_string() + "\n")
+                processed.append(random_number_string())
             else:
                 processed.append(line)
 
-        content = "".join(processed)
+        content = "\n".join(processed)
 
         if 'UUID =' not in content:
             content = f'UUID = "{new_uuid}"\n' + content + f'\nUUID = "{new_uuid}"\n'
 
         content += generate_dynamic_junk_func()
 
-        top_block = "\n".join(random_number_string() for _ in range(random.randint(4, 8))) + "\n"
-        bottom_block = "\n".join(random_number_string() for _ in range(random.randint(4, 8))) + "\n"
-
-        final_data = top_block + content + bottom_block
-
         with open(filename, "w", encoding="utf-8") as f:
-            f.write(final_data)
+            f.write(content)
 
         timestomp_file(filename)
         
-    except Exception as e:
+    except Exception:
         pass
 
 def set_window_title():

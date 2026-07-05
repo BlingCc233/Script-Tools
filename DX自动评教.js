@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         党校系统自动评教助手 (强力穿透版)
+// @name         党校系统自动评教助手
 // @namespace    http://tampermonkey.net/
 // @version      2.0
 // @description  利用Vue实例穿透+精确物理事件模拟，一键全自动评教。

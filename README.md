@@ -11,6 +11,7 @@
 - [YouTube爆改bilibili](https://github.com/BlingCc233/Script-Tools/blob/main/YouTube%E7%88%86%E6%94%B9bilibili.js)丨给你一个蓝色的油管
 - [谷歌爆改百度](https://github.com/BlingCc233/Script-Tools/blob/main/Google2Baidu.js)
 - [HXD浏览器emby绕过限制](https://github.com/BlingCc233/Script-Tools/blob/main/Emby_Bypass.js)
+- [X爆改微博](https://github.com/BlingCc233/Script-Tools/blob/main/X2weibo.js)
 
 ## 各种Windows小脚本
 
